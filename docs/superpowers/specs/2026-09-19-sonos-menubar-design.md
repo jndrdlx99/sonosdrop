@@ -84,7 +84,7 @@ SOAP over `URLSession` to `http://<ip>:1400/MediaRenderer/AVTransport/Control` a
 | Play / Pause / Next / Previous | AVTransport | transport |
 | GetPositionInfo | AVTransport | poll every 1 s while popover is open |
 | GetTransportInfo | AVTransport | PLAYING / PAUSED / STOPPED |
-| GetVolume / SetVolume | RenderingControl | group volume via coordinator |
+| GetGroupVolume / SetGroupVolume | GroupRenderingControl | group volume via coordinator |
 
 Errors: HTTP non-200 or SOAP `UPnPError` → `SonosError.upnp(code)`; timeouts (5 s) →
 `SonosError.unreachable`. Responses are parsed with `XMLParser`; only the needed
@@ -102,7 +102,8 @@ SOAP body. Unit-tested against a known-good string.
 ### MediaServer
 
 - `NWListener` on TCP, port 0 (OS picks), IPv4, all interfaces. Exposes `baseURL`
-  using the Mac's primary LAN IPv4 (first non-loopback `en*` interface with an IPv4).
+  using the Mac's primary LAN IPv4 (first running, non-loopback, non-link-local `en*`
+  interface with an IPv4).
 - Routes: `GET|HEAD /t/<token>`. Token is 16 random bytes, hex. Unknown token → 404.
   Anything else → 404. No directory listing, no path handling.
 - Response: `200` with `Content-Type`, `Content-Length`, `Accept-Ranges: bytes`;

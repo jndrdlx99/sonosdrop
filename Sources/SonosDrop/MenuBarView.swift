@@ -18,7 +18,10 @@ struct MenuBarView: View {
             Divider()
             footer
         }
-        .onAppear { model.startPolling() }
+        .onAppear {
+            model.startPolling()
+            Task { await model.refreshIfStale() }
+        }
         .onDisappear { model.stopPolling() }
         .dropDestination(for: URL.self) { urls, _ in
             Task { await model.drop(urls) }
@@ -33,7 +36,13 @@ struct MenuBarView: View {
             HStack {
                 Picker("Speaker", selection: Binding(get: { model.selectedGroup }, set: { model.selectedGroup = $0 })) {
                     if model.groups.isEmpty { Text("No speakers").tag(SpeakerGroup?.none) }
-                    ForEach(model.groups) { g in Text(g.name).tag(Optional(g)) }
+                    ForEach(model.groups) { g in
+                        if g.id == model.selectedGroup?.id && !model.coordinatorReachable {
+                            Text("\(g.name) (unreachable)").foregroundStyle(.secondary).tag(Optional(g))
+                        } else {
+                            Text(g.name).tag(Optional(g))
+                        }
+                    }
                 }
                 .labelsHidden()
                 Button { Task { await model.refreshGroups() } } label: { Image(systemName: "arrow.clockwise") }

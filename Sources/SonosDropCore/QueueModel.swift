@@ -23,6 +23,8 @@ public final class QueueModel {
     private let server: MediaServing
     private let inspector: @Sendable (URL) -> Track
     private var pollTask: Task<Void, Never>?
+    private var started = false
+    private var lastDiscovery: Date?
 
     public init(client: SonosControlling, discovery: GroupDiscovering, server: MediaServing,
                 inspector: @escaping @Sendable (URL) -> Track = { TrackInspector.inspect($0) }) {
@@ -45,6 +47,8 @@ public final class QueueModel {
     // MARK: lifecycle
 
     public func start() async {
+        guard !started else { return }
+        started = true
         do {
             try await server.start()
             serverStatus = "Serving from \(server.host):\(server.port)"
@@ -65,17 +69,27 @@ public final class QueueModel {
                 selectedGroup = groups.first
             }
             lastError = nil
+            lastDiscovery = Date()
             await refreshVolume()
         } catch {
-            groups = []
-            selectedGroup = nil
+            // Keep the previous groups/selection: a lost SSDP reply or transient discovery
+            // failure should not disable transport mid-playback. Only the initial discovery
+            // (groups still empty) leaves the picker showing "No speakers".
             lastError = describe(error)
         }
+    }
+
+    /// Re-runs discovery only if the last successful discovery is missing or older than `maxAge`.
+    /// Called when the popover opens so a fresh open doesn't always pay for a 3 s SSDP search.
+    public func refreshIfStale(maxAge: TimeInterval = 60) async {
+        if let lastDiscovery, Date().timeIntervalSince(lastDiscovery) <= maxAge { return }
+        await refreshGroups()
     }
 
     // MARK: drop
 
     public func drop(_ urls: [URL]) async {
+        guard !isBusy else { return }
         guard let group = selectedGroup else { lastError = "Pick a speaker first"; return }
         isBusy = true
         defer { isBusy = false }
@@ -84,10 +98,12 @@ public final class QueueModel {
 
         let inspect = inspector
         tracks = await Task.detached { TrackInspector.expand(urls).map(inspect) }.value
-        server.unregisterAll()
 
         do {
             try await client.clearQueue(group)
+            // Only forget the previously served files once the speaker's queue is actually
+            // cleared — if clearQueue throws, the old files stay registered and servable.
+            server.unregisterAll()
             var queuedAny = false
             for i in tracks.indices where tracks[i].status == .ready {
                 let token = server.register(tracks[i].url)

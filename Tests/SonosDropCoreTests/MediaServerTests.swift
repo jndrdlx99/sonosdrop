@@ -82,6 +82,7 @@ private func request(_ url: URL, method: String = "GET", range: String? = nil) a
     #expect(ip != nil)
     #expect(ip?.split(separator: ".").count == 4)
     #expect(ip != "127.0.0.1")
+    #expect(ip?.hasPrefix("169.254.") == false)
 }
 
 @Test func restartAfterStopServesAgain() async throws {

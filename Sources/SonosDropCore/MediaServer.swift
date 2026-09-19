@@ -99,9 +99,10 @@ public final class MediaServer: MediaServing, @unchecked Sendable {
     /// Installs `l` as the active listener iff `generation` still equals `expected`, i.e. no
     /// `start()`/`stop()` ran since the caller captured it. Returns whether it installed; on `false`
     /// the caller owns `l` and must cancel it itself.
-    private func install(_ l: NWListener, ifGenerationIs expected: Int, host newHost: String) -> Bool {
+    private func install(_ l: NWListener, ifGenerationIs expected: Int, host newHost: String, requireExistingListener: Bool = false) -> Bool {
         stateLock.lock(); defer { stateLock.unlock() }
         guard generation == expected else { return false }
+        if requireExistingListener && listener == nil { return false }
         listener?.cancel()
         listener = l
         _port = l.port?.rawValue ?? 0
@@ -160,7 +161,7 @@ public final class MediaServer: MediaServing, @unchecked Sendable {
         let myGeneration = currentGeneration()
         testHook_didCaptureGeneration?()
         guard let l = try? await makeReadyListener() else { return }
-        guard install(l, ifGenerationIs: myGeneration, host: newHost) else {
+        guard install(l, ifGenerationIs: myGeneration, host: newHost, requireExistingListener: true) else {
             l.cancel()
             return
         }
@@ -168,6 +169,17 @@ public final class MediaServer: MediaServing, @unchecked Sendable {
     }
 
     private func startMonitor() {
+        // Cancel any previously installed monitor first: startMonitor() can otherwise be called
+        // more than once (e.g. a caller invoking start() again on an already-started server)
+        // and leak an NWPathMonitor per call, each firing its own rebind.
+        let old: NWPathMonitor? = {
+            stateLock.lock(); defer { stateLock.unlock() }
+            let m = monitor
+            monitor = nil
+            return m
+        }()
+        old?.cancel()
+
         let m = NWPathMonitor()
         m.pathUpdateHandler = { [weak self] path in
             guard let self, path.status == .satisfied else { return }

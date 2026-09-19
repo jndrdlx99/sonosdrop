@@ -17,7 +17,12 @@ public final class Discovery: GroupDiscovering, @unchecked Sendable {
     public func groups(manualIP: String?) async throws -> [SpeakerGroup] {
         var hosts: [String] = []
         if let manualIP, !manualIP.trimmingCharacters(in: .whitespaces).isEmpty {
-            hosts = [manualIP.trimmingCharacters(in: .whitespaces)]
+            let trimmed = manualIP.trimmingCharacters(in: .whitespaces)
+            let forbidden = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "/<>|:"))
+            guard trimmed.rangeOfCharacter(from: forbidden) == nil else {
+                throw SonosError.badResponse("Not a valid speaker address: \(trimmed)")
+            }
+            hosts = [trimmed]
         } else {
             hosts = await ssdp(3)
         }

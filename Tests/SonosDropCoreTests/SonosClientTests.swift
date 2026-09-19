@@ -69,6 +69,15 @@ struct SonosClientTests {
         await #expect(throws: SonosError.upnp(701)) { try await stubClient().play(studio) }
     }
 
+    @Test func invalidManualURLThrowsUnreachableInsteadOfCrashing() async {
+        // A manual IP with an embedded space (e.g. a copy/paste mistake) makes
+        // "http://<ip>:1400<path>" an invalid URL string; invoke() must surface that as
+        // .unreachable instead of force-unwrapping and crashing.
+        await #expect(throws: SonosError.unreachable("10.20 .28.52")) {
+            _ = try await stubClient().invoke(ip: "10.20 .28.52", service: .avTransport, action: "Play", args: [])
+        }
+    }
+
     @Test func unreachableHostIsMapped() async {
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = 1

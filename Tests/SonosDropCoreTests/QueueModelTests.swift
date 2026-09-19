@@ -31,17 +31,22 @@ final class FakeServer: MediaServing, @unchecked Sendable {
     var onAddressChange: (() -> Void)?
     var tokens: [String: URL] = [:]
     var started = false
+    var startCount = 0
     private var counter = 0
-    func start() async throws { started = true }
+    func start() async throws { started = true; startCount += 1 }
     func stop() { started = false }
     func register(_ fileURL: URL) -> String { counter += 1; let t = "tok\(counter)"; tokens[t] = fileURL; return t }
     func url(forToken token: String) -> URL? { tokens[token] == nil ? nil : URL(string: "http://\(host):\(port)/t/\(token)") }
     func unregisterAll() { tokens.removeAll() }
 }
 
-struct FakeDiscovery: GroupDiscovering {
-    let result: Result<[SpeakerGroup], SonosError>
-    func groups(manualIP: String?) async throws -> [SpeakerGroup] { try result.get() }
+/// A class (not a struct) so tests can mutate `result` between calls, e.g. to simulate a
+/// discovery request that starts succeeding and later starts failing.
+final class FakeDiscovery: GroupDiscovering, @unchecked Sendable {
+    var result: Result<[SpeakerGroup], SonosError>
+    var calls = 0
+    init(result: Result<[SpeakerGroup], SonosError>) { self.result = result }
+    func groups(manualIP: String?) async throws -> [SpeakerGroup] { calls += 1; return try result.get() }
 }
 
 let studioGroup = SpeakerGroup(coordinatorUUID: "RINCON_1", coordinatorIP: "10.0.0.2", name: "Studio", memberIPs: ["10.0.0.2"])
@@ -158,4 +163,38 @@ let studioGroup = SpeakerGroup(coordinatorUUID: "RINCON_1", coordinatorIP: "10.0
     FileManager.default.createFile(atPath: dir.appendingPathComponent("a.mp3").path, contents: nil)
     await model.drop([dir])
     #expect(model.tracks.map { $0.url.lastPathComponent } == ["a.mp3", "b.flac"])
+}
+
+@MainActor @Test func startTwiceStartsServerOnce() async {
+    let server = FakeServer()
+    let model = makeModel(server: server)
+    await model.start()
+    await model.start()
+    #expect(server.startCount == 1)
+}
+
+@MainActor @Test func refreshFailureKeepsPreviousSelection() async {
+    let discovery = FakeDiscovery(result: .success([studioGroup]))
+    let model = makeModel(discovery: discovery)
+    await model.start()
+    #expect(model.selectedGroup == studioGroup)
+
+    discovery.result = .failure(.noSpeakers)
+    await model.refreshGroups()
+
+    #expect(model.selectedGroup == studioGroup)
+    #expect(model.lastError == "No Sonos speakers found")
+}
+
+@MainActor @Test func refreshIfStaleSkipsWhenFresh() async {
+    let discovery = FakeDiscovery(result: .success([studioGroup]))
+    let model = makeModel(discovery: discovery)
+    await model.start()
+    #expect(discovery.calls == 1)
+
+    await model.refreshIfStale()
+    #expect(discovery.calls == 1)
+
+    await model.refreshIfStale(maxAge: 0)
+    #expect(discovery.calls == 2)
 }

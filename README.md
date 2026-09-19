@@ -14,7 +14,8 @@ Requires Command Line Tools with Swift 6.4 or newer on macOS 15 or newer.
 
 - Formats: MP3, AAC, FLAC, ALAC, WAV, AIFF, OGG, up to 24-bit/48 kHz stereo (Sonos limits).
   Anything above is listed with a reason and skipped.
-- macOS asks once to allow incoming connections; the speaker pulls the files from this Mac.
+- macOS asks once to allow incoming connections and once for Local Network access; the speaker
+  pulls the files from this Mac, so allow both.
 - Commands always target the group coordinator, so stereo pairs appear once.
 - If discovery finds nothing, use the network icon to enter a speaker IP by hand.
 

@@ -94,3 +94,10 @@ final class TopologyOnlyClient: SonosControlling, @unchecked Sendable {
     let discovery = Discovery(client: TopologyOnlyClient(xml: topologyXML), ssdp: { _ in [] })
     await #expect(throws: SonosError.noSpeakers) { try await discovery.groups(manualIP: nil) }
 }
+
+@Test func discoveryRejectsImplausibleManualIP() async {
+    let discovery = Discovery(client: TopologyOnlyClient(xml: topologyXML), ssdp: { _ in [] })
+    await #expect(throws: SonosError.badResponse("Not a valid speaker address: 10.20.28.52:1400")) {
+        try await discovery.groups(manualIP: "10.20.28.52:1400")
+    }
+}

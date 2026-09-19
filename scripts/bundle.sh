@@ -1,6 +1,7 @@
-#!/bin/sh
+#!/bin/bash
 # Release build -> build/SonosDrop.app -> /Applications. No Xcode, ad-hoc signature.
 set -e
+set -o pipefail
 cd "$(dirname "$0")/.."
 APP=build/SonosDrop.app
 swift build -c release 2>&1 | tail -1
@@ -24,7 +25,7 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
   <key>NSLocalNetworkUsageDescription</key><string>SonosDrop talks to your Sonos speakers and serves your music files to them.</string>
 </dict></plist>
 EOF
-echo -n 'APPL????' > "$APP/Contents/PkgInfo"
+printf 'APPL????' > "$APP/Contents/PkgInfo"
 codesign --force --sign - "$APP"
 rm -rf /Applications/SonosDrop.app
 cp -R "$APP" /Applications/SonosDrop.app

@@ -22,7 +22,10 @@ public final class SonosClient: SonosControlling, @unchecked Sendable {
     }
 
     public func invoke(ip: String, service: SonosService, action: String, args: [(String, String)]) async throws -> [String: String] {
-        var req = URLRequest(url: URL(string: "http://\(ip):1400\(service.controlPath)")!)
+        guard let url = URL(string: "http://\(ip):1400\(service.controlPath)") else {
+            throw SonosError.unreachable(ip)
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.timeoutInterval = 5
         req.setValue("text/xml; charset=\"utf-8\"", forHTTPHeaderField: "Content-Type")
