@@ -36,8 +36,14 @@ final class FakeServer: MediaServing, @unchecked Sendable {
     var startCount = 0
     /// When true, the next `start()` throws instead of succeeding (and does not set `started`).
     var failNextStart = false
+    /// When > 0, `start()` yields this many times before counting/completing — widens the window
+    /// in which a second, concurrent caller could race it (used to prove single-flight behavior).
+    var startDelayTicks = 0
     private var counter = 0
     func start() async throws {
+        if startDelayTicks > 0 {
+            for _ in 0..<startDelayTicks { await Task.yield() }
+        }
         startCount += 1
         guard !failNextStart else { throw FakeServerStartError() }
         started = true
@@ -195,6 +201,39 @@ let studioGroup = SpeakerGroup(coordinatorUUID: "RINCON_1", coordinatorIP: "10.0
     #expect(server.startCount == 2)
     #expect(model.serverStatus == "Serving from 10.0.0.9:5000")
     #expect(model.lastError == nil)
+}
+
+/// `start()` (fired once from `SonosDropApp`'s `.task`) and `refreshIfStale()` (fired once from
+/// `MenuBarView`'s `onAppear`) can both reach `startServerIfNeeded()` before either has set
+/// `serverStarted`, since the "not started yet" check and the actual `server.start()` call are
+/// separated by a suspension point. `startDelayTicks` widens that window deterministically (no
+/// sleeps) so this proves the two calls fold into a single, single-flight server start.
+@MainActor @Test func concurrentStartsStartServerOnce() async {
+    let server = FakeServer()
+    server.startDelayTicks = 5
+    let model = makeModel(server: server)
+
+    async let a: Void = model.start()
+    async let b: Void = model.refreshIfStale()
+    _ = await (a, b)
+
+    #expect(server.startCount == 1)
+    #expect(model.lastError == nil)
+    #expect(model.serverStatus == "Serving from 10.0.0.9:5000")
+}
+
+@MainActor @Test func concurrentFailedStartsFailOnce() async {
+    let server = FakeServer()
+    server.startDelayTicks = 5
+    server.failNextStart = true
+    let model = makeModel(server: server)
+
+    async let a: Void = model.start()
+    async let b: Void = model.refreshIfStale()
+    _ = await (a, b)
+
+    #expect(server.startCount == 1)
+    #expect(model.lastError?.contains("Could not start the file server") == true)
 }
 
 @MainActor @Test func refreshFailureKeepsPreviousSelection() async {

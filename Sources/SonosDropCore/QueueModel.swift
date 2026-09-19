@@ -32,6 +32,13 @@ public final class QueueModel {
     /// later refreshes go through `refreshIfStale`/`refreshGroups` instead.
     private var didInitialDiscovery = false
     private var lastDiscovery: Date?
+    /// The in-flight `startServerIfNeeded()` attempt, if any. `start()` (on first launch) and
+    /// `refreshIfStale()` (from the popover's `onAppear`) can both call `startServerIfNeeded()`
+    /// before either has set `serverStarted`, since the `guard !serverStarted` check and the
+    /// first `await` inside `server.start()` are separated by a suspension point a second caller
+    /// can land in. Funneling every caller through the same `Task` makes the attempt single-flight
+    /// instead of starting the (possibly stateful) server twice concurrently.
+    private var serverStartTask: Task<String?, Never>?
 
     public init(client: SonosControlling, discovery: GroupDiscovering, server: MediaServing,
                 inspector: @escaping @Sendable (URL) -> Track = { TrackInspector.inspect($0) }) {
@@ -63,24 +70,37 @@ public final class QueueModel {
         await refreshGroups()
     }
 
-    /// Starts the media server if it has not already succeeded. Safe to call repeatedly: a
-    /// no-op once `serverStarted`, and a fresh attempt (with its own `lastError`) otherwise.
+    /// Starts the media server if it has not already succeeded. Safe to call repeatedly, and
+    /// safe to call concurrently: a no-op once `serverStarted`; otherwise every caller awaits the
+    /// same single in-flight attempt (`serverStartTask`) rather than each starting their own.
     /// Returns the failure message on failure, or nil on success/no-op, so callers can decide
     /// whether it should still apply after other work (like discovery) touches `lastError`.
     @discardableResult
     private func startServerIfNeeded() async -> String? {
         guard !serverStarted else { return nil }
-        do {
-            try await server.start()
-            serverStatus = "Serving from \(server.host):\(server.port)"
-            serverStarted = true
-            lastError = nil
-            return nil
-        } catch {
-            let message = "Could not start the file server: \(error)"
-            lastError = message
-            return message
+        if let serverStartTask {
+            return await serverStartTask.value
         }
+        // The whole state mutation below runs inside the task, so it executes exactly once no
+        // matter how many callers are awaiting `task.value` — there is only ever one instance of
+        // this closure body in flight per attempt.
+        let task = Task { @MainActor [weak self] () -> String? in
+            guard let self else { return nil }
+            defer { self.serverStartTask = nil }
+            do {
+                try await self.server.start()
+                self.serverStatus = "Serving from \(self.server.host):\(self.server.port)"
+                self.serverStarted = true
+                self.lastError = nil
+                return nil
+            } catch {
+                let message = "Could not start the file server: \(error)"
+                self.lastError = message
+                return message
+            }
+        }
+        serverStartTask = task
+        return await task.value
     }
 
     public func refreshGroups() async {
