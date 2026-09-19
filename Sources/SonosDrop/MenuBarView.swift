@@ -88,7 +88,7 @@ struct MenuBarView: View {
                     .help("Play a folder")
             }
             if ui.showManualIP {
-                TextField("Speaker IP, e.g. 10.20.28.52", text: Binding(get: { model.manualIP }, set: { model.manualIP = $0 }))
+                TextField("Speaker IP, e.g. 192.168.1.52", text: Binding(get: { model.manualIP }, set: { model.manualIP = $0 }))
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await model.refreshGroups() }; ui.showManualIP = false }
             }

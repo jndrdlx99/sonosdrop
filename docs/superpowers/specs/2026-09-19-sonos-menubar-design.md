@@ -7,11 +7,11 @@ Status: approved design, v1 scope
 
 The official Sonos macOS app is unusable on this machine. The user has local FLAC/MP3
 files and a Sonos S2 system (two Sonos Five as a stereo pair named "Studio",
-coordinator 10.20.28.52, secondary 10.20.28.56, firmware 97.1). They need a small,
+coordinator 192.168.1.52, secondary 192.168.1.56, firmware 97.1). They need a small,
 dependency-free native app that plays dropped files on a chosen speaker group.
 
 Proven on this network with soco-cli: serve a file over plain HTTP from the Mac
-(10.20.28.66) and hand the URL to the coordinator via UPnP AVTransport. Sonos pulls
+(192.168.1.66) and hand the URL to the coordinator via UPnP AVTransport. Sonos pulls
 the file and plays it.
 
 ## Scope (v1)

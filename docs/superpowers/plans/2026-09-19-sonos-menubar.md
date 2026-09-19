@@ -1344,16 +1344,16 @@ import Foundation
 // Captured from the user's network (trimmed) plus a synthetic 2-room group and an invisible bridge.
 let topologyXML = """
 <ZoneGroupState><ZoneGroups>\
-<ZoneGroup Coordinator="RINCON_347E5CDB811801400" ID="RINCON_347E5CDB811801400:123">\
-<ZoneGroupMember UUID="RINCON_C43875F099E001400" Location="http://10.20.28.56:1400/xml/device_description.xml" ZoneName="Studio" Icon="x-rincon-roomicon:office" SWGen="2"/>\
-<ZoneGroupMember UUID="RINCON_347E5CDB811801400" Location="http://10.20.28.52:1400/xml/device_description.xml" ZoneName="Studio" Icon="x-rincon-roomicon:office" SWGen="2"/>\
+<ZoneGroup Coordinator="RINCON_A1B2C300000001400" ID="RINCON_A1B2C300000001400:123">\
+<ZoneGroupMember UUID="RINCON_A1B2C300000101400" Location="http://192.168.1.56:1400/xml/device_description.xml" ZoneName="Studio" Icon="x-rincon-roomicon:office" SWGen="2"/>\
+<ZoneGroupMember UUID="RINCON_A1B2C300000001400" Location="http://192.168.1.52:1400/xml/device_description.xml" ZoneName="Studio" Icon="x-rincon-roomicon:office" SWGen="2"/>\
 </ZoneGroup>\
 <ZoneGroup Coordinator="RINCON_AAA" ID="RINCON_AAA:5">\
-<ZoneGroupMember UUID="RINCON_AAA" Location="http://10.20.28.60:1400/xml/device_description.xml" ZoneName="Kitchen"/>\
-<ZoneGroupMember UUID="RINCON_BBB" Location="http://10.20.28.61:1400/xml/device_description.xml" ZoneName="Patio"/>\
+<ZoneGroupMember UUID="RINCON_AAA" Location="http://192.168.1.60:1400/xml/device_description.xml" ZoneName="Kitchen"/>\
+<ZoneGroupMember UUID="RINCON_BBB" Location="http://192.168.1.61:1400/xml/device_description.xml" ZoneName="Patio"/>\
 </ZoneGroup>\
 <ZoneGroup Coordinator="RINCON_BOOST" ID="RINCON_BOOST:1">\
-<ZoneGroupMember UUID="RINCON_BOOST" Location="http://10.20.28.70:1400/xml/device_description.xml" ZoneName="BOOST" Invisible="1"/>\
+<ZoneGroupMember UUID="RINCON_BOOST" Location="http://192.168.1.70:1400/xml/device_description.xml" ZoneName="BOOST" Invisible="1"/>\
 </ZoneGroup>\
 </ZoneGroups><VanishedDevices/></ZoneGroupState>
 """
@@ -1361,9 +1361,9 @@ let topologyXML = """
 @Test func stereoPairCollapsesToCoordinator() {
     let groups = TopologyParser.parse(topologyXML)
     let studio = groups.first { $0.name == "Studio" }
-    #expect(studio?.coordinatorIP == "10.20.28.52")
-    #expect(studio?.coordinatorUUID == "RINCON_347E5CDB811801400")
-    #expect(studio?.memberIPs.sorted() == ["10.20.28.52", "10.20.28.56"])
+    #expect(studio?.coordinatorIP == "192.168.1.52")
+    #expect(studio?.coordinatorUUID == "RINCON_A1B2C300000001400")
+    #expect(studio?.memberIPs.sorted() == ["192.168.1.52", "192.168.1.56"])
 }
 
 @Test func multiRoomGroupJoinsNamesAndInvisibleGroupsAreDropped() {
@@ -1386,8 +1386,8 @@ let topologyXML = """
 }
 
 @Test func ssdpReplyLocationHost() {
-    let reply = "HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age = 1800\r\nEXT:\r\nLOCATION: http://10.20.28.52:1400/xml/device_description.xml\r\nSERVER: Linux UPnP/1.0 Sonos/97.1-80312 (ZPS24)\r\nST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n\r\n"
-    #expect(SSDP.locationHost(inReply: reply) == "10.20.28.52")
+    let reply = "HTTP/1.1 200 OK\r\nCACHE-CONTROL: max-age = 1800\r\nEXT:\r\nLOCATION: http://192.168.1.52:1400/xml/device_description.xml\r\nSERVER: Linux UPnP/1.0 Sonos/97.1-80312 (ZPS24)\r\nST: urn:schemas-upnp-org:device:ZonePlayer:1\r\n\r\n"
+    #expect(SSDP.locationHost(inReply: reply) == "192.168.1.52")
     #expect(SSDP.locationHost(inReply: "HTTP/1.1 200 OK\r\n\r\n") == nil)
 }
 ```
@@ -1506,11 +1506,11 @@ Add this test to `TopologyTests.swift`:
 @Test(.disabled("manual: needs LAN")) func ssdpFindsRealSpeakers() async {
     let hosts = await SSDP.discoverHosts(timeout: 3)
     print("SSDP hosts:", hosts)
-    #expect(hosts.contains("10.20.28.52"))
+    #expect(hosts.contains("192.168.1.52"))
 }
 ```
 Run once with the `.disabled` trait removed: `swift test --filter ssdpFindsRealSpeakers 2>&1 | grep -E 'SSDP hosts|passed|failed'`.
-Expected: `SSDP hosts: ["10.20.28.52", "10.20.28.56"]` (order may vary). Put the trait back before committing so CI-style runs stay LAN-independent.
+Expected: `SSDP hosts: ["192.168.1.52", "192.168.1.56"]` (order may vary). Put the trait back before committing so CI-style runs stay LAN-independent.
 
 - [ ] **Step 6: Commit**
 
@@ -1584,7 +1584,7 @@ private func stubClient() -> SonosClient {
     return SonosClient(session: URLSession(configuration: cfg))
 }
 
-private let studio = SpeakerGroup(coordinatorUUID: "RINCON_347E5CDB811801400", coordinatorIP: "10.20.28.52", name: "Studio", memberIPs: ["10.20.28.52", "10.20.28.56"])
+private let studio = SpeakerGroup(coordinatorUUID: "RINCON_A1B2C300000001400", coordinatorIP: "192.168.1.52", name: "Studio", memberIPs: ["192.168.1.52", "192.168.1.56"])
 
 private func response(_ action: String, _ inner: String) -> String {
     "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:\(action)Response xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\(inner)</u:\(action)Response></s:Body></s:Envelope>"
@@ -1593,10 +1593,10 @@ private func response(_ action: String, _ inner: String) -> String {
 @Test func addToQueueTargetsCoordinatorWithSoapHeaders() async throws {
     StubProtocol.status = 200
     StubProtocol.responseBody = response("AddURIToQueue", "<FirstTrackNumberEnqueued>3</FirstTrackNumberEnqueued><NumTracksAdded>1</NumTracksAdded><NewQueueLength>3</NewQueueLength>")
-    let n = try await stubClient().addToQueue(studio, uri: "http://10.20.28.66:5000/t/abc", metadata: "<DIDL-Lite/>")
+    let n = try await stubClient().addToQueue(studio, uri: "http://192.168.1.66:5000/t/abc", metadata: "<DIDL-Lite/>")
     #expect(n == 3)
     let req = StubProtocol.lastRequest!
-    #expect(req.url?.absoluteString == "http://10.20.28.52:1400/MediaRenderer/AVTransport/Control")
+    #expect(req.url?.absoluteString == "http://192.168.1.52:1400/MediaRenderer/AVTransport/Control")
     #expect(req.httpMethod == "POST")
     #expect(req.value(forHTTPHeaderField: "SOAPACTION") == "\"urn:schemas-upnp-org:service:AVTransport:1#AddURIToQueue\"")
     #expect(req.value(forHTTPHeaderField: "Content-Type") == "text/xml; charset=\"utf-8\"")
@@ -1793,17 +1793,17 @@ final class TopologyOnlyClient: SonosControlling, @unchecked Sendable {
 
 @Test func discoveryUsesFirstSSDPHostAndParsesGroups() async throws {
     let client = TopologyOnlyClient(xml: topologyXML)
-    let discovery = Discovery(client: client, ssdp: { _ in ["10.20.28.52", "10.20.28.56"] })
+    let discovery = Discovery(client: client, ssdp: { _ in ["192.168.1.52", "192.168.1.56"] })
     let groups = try await discovery.groups(manualIP: nil)
-    #expect(client.askedIPs == ["10.20.28.52"])
+    #expect(client.askedIPs == ["192.168.1.52"])
     #expect(groups.map(\.name).sorted() == ["Kitchen + Patio", "Studio"])
 }
 
 @Test func discoveryFallsBackToManualIP() async throws {
     let client = TopologyOnlyClient(xml: topologyXML)
     let discovery = Discovery(client: client, ssdp: { _ in [] })
-    _ = try await discovery.groups(manualIP: "10.20.28.52")
-    #expect(client.askedIPs == ["10.20.28.52"])
+    _ = try await discovery.groups(manualIP: "192.168.1.52")
+    #expect(client.askedIPs == ["192.168.1.52"])
 }
 
 @Test func discoveryWithNothingThrowsNoSpeakers() async {
@@ -2347,7 +2347,7 @@ struct MenuBarView: View {
                     .help("Enter a speaker IP manually")
             }
             if showManualIP {
-                TextField("Speaker IP, e.g. 10.20.28.52", text: $model.manualIP)
+                TextField("Speaker IP, e.g. 192.168.1.52", text: $model.manualIP)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await model.refreshGroups() }; showManualIP = false }
             }
@@ -2461,7 +2461,7 @@ struct MenuBarView: View {
 - [ ] **Step 3: Build and launch from the terminal**
 
 Run: `swift build 2>&1 | tail -3 && .build/debug/SonosDrop &`
-Expected: a speaker icon appears in the menu bar. Click it: the popover shows "Studio" selected and "Serving from 10.20.28.66:<port>". Stop with `kill %1` when done. If the first launch triggers "accept incoming network connections", click Allow.
+Expected: a speaker icon appears in the menu bar. Click it: the popover shows "Studio" selected and "Serving from 192.168.1.66:<port>". Stop with `kill %1` when done. If the first launch triggers "accept incoming network connections", click Allow.
 
 Common compile fixes:
 - `Picker` selection needs `Optional(g)` tags matching `SpeakerGroup?` (already done).
@@ -2526,7 +2526,7 @@ Claude-Session: https://claude.ai/code/session_01SEZwLYqtEGaVLvQawRrbnK"
 Run each check with `/Applications/SonosDrop.app` open. Fix anything that fails in the unit that owns it (see file structure) and add a regression test where one is possible before committing the fix.
 
 - [ ] **Step 1: Discovery**
-  Popover lists "Studio" once (not twice, not 10.20.28.56). Refresh button repopulates. Clear the list by turning Wi-Fi off, click refresh: banner "No Sonos speakers found". Turn Wi-Fi on, enter `10.20.28.52` in the manual IP field, press return: Studio is back.
+  Popover lists "Studio" once (not twice, not 192.168.1.56). Refresh button repopulates. Clear the list by turning Wi-Fi off, click refresh: banner "No Sonos speakers found". Turn Wi-Fi on, enter `192.168.1.52` in the manual IP field, press return: Studio is back.
 
 - [ ] **Step 2: Single file**
   Drop `~/Music/Bad Bunny/Un Verano Sin Ti/Bad Bunny - Moscow Mule.flac`. Within 3 s the speaker plays it, the row shows the green speaker icon, badge "FLAC 16/44.1", footer shows title, artist, elapsed counting up. Sonos iOS app shows title and artist too (DIDL metadata worked).

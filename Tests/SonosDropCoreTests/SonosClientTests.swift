@@ -26,7 +26,7 @@ private func stubClient() -> SonosClient {
     return SonosClient(session: URLSession(configuration: cfg))
 }
 
-private let studio = SpeakerGroup(coordinatorUUID: "RINCON_347E5CDB811801400", coordinatorIP: "10.20.28.52", name: "Studio", memberIPs: ["10.20.28.52", "10.20.28.56"])
+private let studio = SpeakerGroup(coordinatorUUID: "RINCON_A1B2C300000001400", coordinatorIP: "192.168.1.52", name: "Studio", memberIPs: ["192.168.1.52", "192.168.1.56"])
 
 private func response(_ action: String, _ inner: String) -> String {
     "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"><s:Body><u:\(action)Response xmlns:u=\"urn:schemas-upnp-org:service:AVTransport:1\">\(inner)</u:\(action)Response></s:Body></s:Envelope>"
@@ -40,10 +40,10 @@ struct SonosClientTests {
     @Test func addToQueueTargetsCoordinatorWithSoapHeaders() async throws {
         StubProtocol.status = 200
         StubProtocol.responseBody = response("AddURIToQueue", "<FirstTrackNumberEnqueued>3</FirstTrackNumberEnqueued><NumTracksAdded>1</NumTracksAdded><NewQueueLength>3</NewQueueLength>")
-        let n = try await stubClient().addToQueue(studio, uri: "http://10.20.28.66:5000/t/abc", metadata: "<DIDL-Lite/>")
+        let n = try await stubClient().addToQueue(studio, uri: "http://192.168.1.66:5000/t/abc", metadata: "<DIDL-Lite/>")
         #expect(n == 3)
         let req = StubProtocol.lastRequest!
-        #expect(req.url?.absoluteString == "http://10.20.28.52:1400/MediaRenderer/AVTransport/Control")
+        #expect(req.url?.absoluteString == "http://192.168.1.52:1400/MediaRenderer/AVTransport/Control")
         #expect(req.httpMethod == "POST")
         #expect(req.value(forHTTPHeaderField: "SOAPACTION") == "\"urn:schemas-upnp-org:service:AVTransport:1#AddURIToQueue\"")
         #expect(req.value(forHTTPHeaderField: "Content-Type") == "text/xml; charset=\"utf-8\"")
