@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SonosDropCore
 
 @Observable
@@ -9,6 +10,35 @@ final class MenuBarUIState {
 struct MenuBarView: View {
     let model: QueueModel
     let ui: MenuBarUIState
+
+    /// Opens a standard macOS open panel and hands the chosen URLs to the same path a drag-and-drop uses.
+    /// The menu bar popover closes when a drag starts from Finder, so a picker is the reliable route.
+    private func pickAndDrop(folders: Bool) {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = folders
+        panel.canChooseFiles = !folders
+        panel.allowsMultipleSelection = true
+        panel.title = folders ? "Choose a folder to play" : "Choose songs to play"
+        panel.prompt = "Play"
+        if !folders {
+            panel.allowedContentTypes = [.audio]
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { response in
+            guard response == .OK, !panel.urls.isEmpty else { return }
+            let urls = panel.urls
+            Task { @MainActor in await model.drop(urls) }
+        }
+    }
+
+    private var pickerButtons: some View {
+        HStack(spacing: 8) {
+            Button { pickAndDrop(folders: true) } label: { Label("Add Folder…", systemImage: "folder.badge.plus") }
+            Button { pickAndDrop(folders: false) } label: { Label("Add Files…", systemImage: "music.note.list") }
+        }
+        .controlSize(.small)
+        .disabled(model.selectedGroup == nil || model.isBusy)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -52,6 +82,10 @@ struct MenuBarView: View {
                 Button { ui.showManualIP.toggle() } label: { Image(systemName: "network") }
                     .buttonStyle(.borderless)
                     .help("Enter a speaker IP manually")
+                Button { pickAndDrop(folders: true) } label: { Image(systemName: "folder.badge.plus") }
+                    .buttonStyle(.borderless)
+                    .disabled(model.selectedGroup == nil || model.isBusy)
+                    .help("Play a folder")
             }
             if ui.showManualIP {
                 TextField("Speaker IP, e.g. 10.20.28.52", text: Binding(get: { model.manualIP }, set: { model.manualIP = $0 }))
@@ -68,6 +102,7 @@ struct MenuBarView: View {
         VStack(spacing: 8) {
             Image(systemName: "arrow.down.doc").font(.system(size: 36)).foregroundStyle(.secondary)
             Text("Drop songs or a folder here").font(.headline)
+            pickerButtons.padding(.vertical, 4)
             Text("FLAC, MP3, AAC, ALAC, WAV, AIFF, OGG up to 24-bit/48 kHz")
                 .font(.caption).foregroundStyle(.secondary)
             Text("macOS may ask to allow incoming connections. The speaker pulls the files from this Mac, so click Allow.")
