@@ -83,3 +83,68 @@ private func request(_ url: URL, method: String = "GET", range: String? = nil) a
     #expect(ip?.split(separator: ".").count == 4)
     #expect(ip != "127.0.0.1")
 }
+
+@Test func restartAfterStopServesAgain() async throws {
+    let server = MediaServer(hostOverride: "127.0.0.1")
+    try await server.start()
+    let token1 = server.register(fixture("tone_aac", "m4a"))
+    let url1 = server.url(forToken: token1)!
+    let (_, resp1) = try await request(url1)
+    #expect(resp1.statusCode == 200)
+
+    server.stop()
+    try await server.start()
+    defer { server.stop() }
+
+    let token2 = server.register(fixture("tone_aac", "m4a"))
+    let url2 = server.url(forToken: token2)!
+    let (_, resp2) = try await request(url2)
+    #expect(resp2.statusCode == 200)
+}
+
+@Test func rebindDiscardedWhenStoppedMidFlight() async throws {
+    let server = MediaServer(hostOverride: "127.0.0.1")
+    try await server.start()
+    defer { server.stop() }
+    let token = server.register(fixture("tone_aac", "m4a"))
+    let oldURL = server.url(forToken: token)!
+
+    nonisolated(unsafe) var notified = false
+    server.onAddressChange = { notified = true }
+    // Deterministically land stop() in the window between the rebind capturing its generation and
+    // installing its new listener — the exact race the generation check exists to resolve. A real
+    // OS-scheduling race here (Task + Task.yield()) was empirically flaky: loopback listener
+    // creation can complete in well under a millisecond, sometimes faster than the yield resumes,
+    // so the rebind occasionally finished (and fired onAddressChange) before stop() got a chance to
+    // run at all.
+    server.testHook_didCaptureGeneration = { server.stop() }
+
+    await server.rebindForAddressChange(newHost: "127.0.0.1")
+
+    #expect(server.isListening == false)
+    #expect(server.port == 0)
+    #expect(notified == false)
+    do {
+        _ = try await request(oldURL)
+        Issue.record("expected a request to the stopped server's old address to fail")
+    } catch {
+        // expected: stop() tore down the listener the request was aimed at.
+    }
+}
+
+@Test func rebindInstallsNewListenerAndNotifies() async throws {
+    let server = MediaServer(hostOverride: "127.0.0.1")
+    try await server.start()
+    defer { server.stop() }
+
+    nonisolated(unsafe) var notifyCount = 0
+    server.onAddressChange = { notifyCount += 1 }
+
+    await server.rebindForAddressChange(newHost: "127.0.0.1")
+    #expect(notifyCount == 1)
+
+    let token = server.register(fixture("tone_aac", "m4a"))
+    let url = server.url(forToken: token)!
+    let (_, resp) = try await request(url)
+    #expect(resp.statusCode == 200)
+}
