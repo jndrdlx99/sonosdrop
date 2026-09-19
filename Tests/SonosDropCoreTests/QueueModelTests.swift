@@ -25,6 +25,8 @@ final class FakeClient: SonosControlling, @unchecked Sendable {
     func zoneGroupStateXML(ip: String) async throws -> String { "" }
 }
 
+struct FakeServerStartError: Error {}
+
 final class FakeServer: MediaServing, @unchecked Sendable {
     var port: UInt16 = 5000
     var host = "10.0.0.9"
@@ -32,8 +34,14 @@ final class FakeServer: MediaServing, @unchecked Sendable {
     var tokens: [String: URL] = [:]
     var started = false
     var startCount = 0
+    /// When true, the next `start()` throws instead of succeeding (and does not set `started`).
+    var failNextStart = false
     private var counter = 0
-    func start() async throws { started = true; startCount += 1 }
+    func start() async throws {
+        startCount += 1
+        guard !failNextStart else { throw FakeServerStartError() }
+        started = true
+    }
     func stop() { started = false }
     func register(_ fileURL: URL) -> String { counter += 1; let t = "tok\(counter)"; tokens[t] = fileURL; return t }
     func url(forToken token: String) -> URL? { tokens[token] == nil ? nil : URL(string: "http://\(host):\(port)/t/\(token)") }
@@ -171,6 +179,22 @@ let studioGroup = SpeakerGroup(coordinatorUUID: "RINCON_1", coordinatorIP: "10.0
     await model.start()
     await model.start()
     #expect(server.startCount == 1)
+}
+
+@MainActor @Test func failedServerStartIsRetried() async {
+    let server = FakeServer()
+    server.failNextStart = true
+    let model = makeModel(server: server)
+
+    await model.start()
+    #expect(model.lastError?.contains("Could not start the file server") == true)
+    #expect(server.startCount == 1)
+
+    server.failNextStart = false
+    await model.start()
+    #expect(server.startCount == 2)
+    #expect(model.serverStatus == "Serving from 10.0.0.9:5000")
+    #expect(model.lastError == nil)
 }
 
 @MainActor @Test func refreshFailureKeepsPreviousSelection() async {

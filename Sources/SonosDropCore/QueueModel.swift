@@ -23,7 +23,14 @@ public final class QueueModel {
     private let server: MediaServing
     private let inspector: @Sendable (URL) -> Track
     private var pollTask: Task<Void, Never>?
-    private var started = false
+    /// True only once `server.start()` has actually succeeded. Left false on failure so the next
+    /// `start()`/`refreshIfStale()` retries the server instead of being permanently locked out
+    /// (e.g. the Mac was offline, or the user had not yet answered the Local Network prompt).
+    private var serverStarted = false
+    /// True once the very first discovery has been kicked off, success or failure. Guards
+    /// `start()` against re-running discovery (and its 3 s SSDP search) on every popover open;
+    /// later refreshes go through `refreshIfStale`/`refreshGroups` instead.
+    private var didInitialDiscovery = false
     private var lastDiscovery: Date?
 
     public init(client: SonosControlling, discovery: GroupDiscovering, server: MediaServing,
@@ -47,15 +54,33 @@ public final class QueueModel {
     // MARK: lifecycle
 
     public func start() async {
-        guard !started else { return }
-        started = true
+        let serverFailure = await startServerIfNeeded()
+        // Discovery's own success/failure handling clears/sets lastError; if the server also
+        // failed this call, that message takes priority over whatever discovery left behind.
+        defer { if let serverFailure { lastError = serverFailure } }
+        guard !didInitialDiscovery else { return }
+        didInitialDiscovery = true
+        await refreshGroups()
+    }
+
+    /// Starts the media server if it has not already succeeded. Safe to call repeatedly: a
+    /// no-op once `serverStarted`, and a fresh attempt (with its own `lastError`) otherwise.
+    /// Returns the failure message on failure, or nil on success/no-op, so callers can decide
+    /// whether it should still apply after other work (like discovery) touches `lastError`.
+    @discardableResult
+    private func startServerIfNeeded() async -> String? {
+        guard !serverStarted else { return nil }
         do {
             try await server.start()
             serverStatus = "Serving from \(server.host):\(server.port)"
+            serverStarted = true
+            lastError = nil
+            return nil
         } catch {
-            lastError = "Could not start the file server: \(error)"
+            let message = "Could not start the file server: \(error)"
+            lastError = message
+            return message
         }
-        await refreshGroups()
     }
 
     public func refreshGroups() async {
@@ -79,9 +104,13 @@ public final class QueueModel {
         }
     }
 
-    /// Re-runs discovery only if the last successful discovery is missing or older than `maxAge`.
-    /// Called when the popover opens so a fresh open doesn't always pay for a 3 s SSDP search.
+    /// Re-runs discovery only if the last successful discovery is missing or older than `maxAge`;
+    /// also retries the media server if it never successfully started. Called when the popover
+    /// opens so a fresh open doesn't always pay for a 3 s SSDP search.
     public func refreshIfStale(maxAge: TimeInterval = 60) async {
+        guard !isBusy else { return }
+        let serverFailure = await startServerIfNeeded()
+        defer { if let serverFailure { lastError = serverFailure } }
         if let lastDiscovery, Date().timeIntervalSince(lastDiscovery) <= maxAge { return }
         await refreshGroups()
     }
@@ -89,7 +118,7 @@ public final class QueueModel {
     // MARK: drop
 
     public func drop(_ urls: [URL]) async {
-        guard !isBusy else { return }
+        guard !isBusy else { lastError = "Busy, try the drop again in a moment"; return }
         guard let group = selectedGroup else { lastError = "Pick a speaker first"; return }
         isBusy = true
         defer { isBusy = false }
