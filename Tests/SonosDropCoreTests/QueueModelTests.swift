@@ -146,3 +146,16 @@ let studioGroup = SpeakerGroup(coordinatorUUID: "RINCON_1", coordinatorIP: "10.0
     #expect(model.needsResend)
     #expect(model.lastError == "Network changed, drop the files again to resend")
 }
+
+@MainActor @Test func dropExpandsFolderOffMainActor() async throws {
+    let client = FakeClient()
+    let model = makeModel(client: client)
+    await model.start()
+    let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    FileManager.default.createFile(atPath: dir.appendingPathComponent("b.flac").path, contents: nil)
+    FileManager.default.createFile(atPath: dir.appendingPathComponent("a.mp3").path, contents: nil)
+    await model.drop([dir])
+    #expect(model.tracks.map { $0.url.lastPathComponent } == ["a.mp3", "b.flac"])
+}

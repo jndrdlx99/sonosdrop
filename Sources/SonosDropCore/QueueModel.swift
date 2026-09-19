@@ -82,9 +82,8 @@ public final class QueueModel {
         needsResend = false
         lastError = nil
 
-        let files = TrackInspector.expand(urls)
         let inspect = inspector
-        tracks = await Task.detached { files.map(inspect) }.value
+        tracks = await Task.detached { TrackInspector.expand(urls).map(inspect) }.value
         server.unregisterAll()
 
         do {
@@ -148,7 +147,8 @@ public final class QueueModel {
         stopPolling()
         pollTask = Task { [weak self] in
             while !Task.isCancelled {
-                await self?.pollOnce()
+                guard let self else { return }
+                await self.pollOnce()
                 try? await Task.sleep(for: .seconds(1))
             }
         }
