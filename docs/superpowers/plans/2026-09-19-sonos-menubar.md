@@ -2261,6 +2261,12 @@ Claude-Session: https://claude.ai/code/session_01SEZwLYqtEGaVLvQawRrbnK"
 
 ### Task 11: Menu bar app, view, and bundle script
 
+> **Execution ruling (2026-09-19):** the SwiftUI property-wrapper macros (`@State`, `@Bindable`,
+> `@Environment`) ship only with Xcode, not the Command Line Tools. The code below is kept for the
+> record, but the implementation must avoid every SwiftUI property wrapper: the App holds
+> `let model: QueueModel` and `let ui = MenuBarUIState()` (an `@Observable` class for view-local
+> state), views take them as plain `let` properties, and every binding is `Binding(get:set:)`.
+
 **Files:**
 - Replace: `Sources/SonosDrop/SonosDropApp.swift`
 - Create: `Sources/SonosDrop/MenuBarView.swift`, `scripts/bundle.sh`
