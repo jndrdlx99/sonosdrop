@@ -57,3 +57,40 @@ let topologyXML = """
     print("SSDP hosts:", hosts)
     #expect(hosts.contains("10.20.28.52"))
 }
+
+final class TopologyOnlyClient: SonosControlling, @unchecked Sendable {
+    var askedIPs: [String] = []
+    let xml: String
+    init(xml: String) { self.xml = xml }
+    func zoneGroupStateXML(ip: String) async throws -> String { askedIPs.append(ip); return xml }
+    func clearQueue(_ g: SpeakerGroup) async throws {}
+    func addToQueue(_ g: SpeakerGroup, uri: String, metadata: String) async throws -> Int { 0 }
+    func playQueue(_ g: SpeakerGroup) async throws {}
+    func play(_ g: SpeakerGroup) async throws {}
+    func pause(_ g: SpeakerGroup) async throws {}
+    func next(_ g: SpeakerGroup) async throws {}
+    func previous(_ g: SpeakerGroup) async throws {}
+    func positionInfo(_ g: SpeakerGroup) async throws -> NowPlaying { .idle }
+    func volume(_ g: SpeakerGroup) async throws -> Int { 0 }
+    func setVolume(_ g: SpeakerGroup, _ value: Int) async throws {}
+}
+
+@Test func discoveryUsesFirstSSDPHostAndParsesGroups() async throws {
+    let client = TopologyOnlyClient(xml: topologyXML)
+    let discovery = Discovery(client: client, ssdp: { _ in ["10.20.28.52", "10.20.28.56"] })
+    let groups = try await discovery.groups(manualIP: nil)
+    #expect(client.askedIPs == ["10.20.28.52"])
+    #expect(groups.map(\.name).sorted() == ["Kitchen + Patio", "Studio"])
+}
+
+@Test func discoveryFallsBackToManualIP() async throws {
+    let client = TopologyOnlyClient(xml: topologyXML)
+    let discovery = Discovery(client: client, ssdp: { _ in [] })
+    _ = try await discovery.groups(manualIP: "10.20.28.52")
+    #expect(client.askedIPs == ["10.20.28.52"])
+}
+
+@Test func discoveryWithNothingThrowsNoSpeakers() async {
+    let discovery = Discovery(client: TopologyOnlyClient(xml: topologyXML), ssdp: { _ in [] })
+    await #expect(throws: SonosError.noSpeakers) { try await discovery.groups(manualIP: nil) }
+}
